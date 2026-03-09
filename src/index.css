@@ -117,23 +117,33 @@ body {
 /* Custom CSS Logo */
 .css-logo {
   position: relative;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  background: transparent;
-  border: 3px solid var(--accent);
-  transform: rotate(45deg);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.css-logo::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  top: -4px;
+  right: -4px;
 }
 
 .css-logo::after {
   content: '';
   position: absolute;
-  width: 10px;
-  height: 10px;
-  background: var(--primary);
+  width: 6px;
+  height: 6px;
+  background: var(--text);
   border-radius: 50%;
 }
 
@@ -196,19 +206,19 @@ body {
 .cta-btn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 38px;
+  gap: 8px;
+  padding: 10px 26px;
   background: #f8fafc;
   color: #0f172a;
   border: none;
   font-family: 'Outfit', sans-serif;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  margin-top: 12px;
+  margin-top: 8px;
   position: relative;
   overflow: hidden;
 }
@@ -582,8 +592,8 @@ body {
 }
 
 .dock-mic {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;

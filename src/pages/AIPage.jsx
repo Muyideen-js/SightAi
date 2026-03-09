@@ -149,7 +149,7 @@ function AIPage() {
           <FiArrowLeft size={16} />
         </button>
         <div className="tb-center">
-          <div className="css-logo" style={{ transform: 'rotate(45deg) scale(0.6)' }} />
+          <div className="css-logo" style={{ transform: 'scale(0.6)' }} />
           <span className="tb-logo">SightAI</span>
           <span className={`tb-status ${statusCls}`}>
             <span className="tb-dot" />
