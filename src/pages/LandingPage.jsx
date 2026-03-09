@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { FiZap, FiCamera, FiMic, FiArrowRight } from 'react-icons/fi'
+import { FiCamera, FiMic, FiZap, FiArrowRight } from 'react-icons/fi'
 
 function LandingPage() {
   const navigate = useNavigate()
@@ -12,11 +12,10 @@ function LandingPage() {
       </div>
 
       <div className="landing-content">
-        <div className="logo-mark">
-          <FiZap />
-        </div>
-
-        <h1>SightAI</h1>
+        <h1>
+          <div className="css-logo" />
+          SightAI
+        </h1>
         <p className="tagline">See. Ask. Know.</p>
         <p className="desc">
           Point your camera at anything and ask a question.
@@ -36,7 +35,7 @@ function LandingPage() {
         </div>
 
         <button className="cta-btn" onClick={() => navigate('/ai')}>
-          Start <FiArrowRight size={16} />
+          Get Started <FiArrowRight size={16} />
         </button>
       </div>
     </div>

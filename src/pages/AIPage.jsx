@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   FiMic, FiMicOff, FiCamera, FiCameraOff,
   FiRefreshCw, FiVolume2, FiArrowLeft
@@ -128,7 +130,10 @@ function AIPage() {
   const speak = (text) => {
     if (!('speechSynthesis' in window)) return
     window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(text)
+    
+    // Strip markdown chars before speaking
+    const cleanText = text.replace(/[*_#]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    const u = new SpeechSynthesisUtterance(cleanText)
     u.rate = 1
     u.pitch = 1
     window.speechSynthesis.speak(u)
@@ -144,6 +149,7 @@ function AIPage() {
           <FiArrowLeft size={16} />
         </button>
         <div className="tb-center">
+          <div className="css-logo" style={{ transform: 'rotate(45deg) scale(0.6)' }} />
           <span className="tb-logo">SightAI</span>
           <span className={`tb-status ${statusCls}`}>
             <span className="tb-dot" />
@@ -162,7 +168,11 @@ function AIPage() {
 
       {response && (
         <div className="ai-response-wrap">
-          <div className="ai-response-card">{response}</div>
+          <div className="ai-response-card markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {response}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 
