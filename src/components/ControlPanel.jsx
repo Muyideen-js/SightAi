@@ -3,7 +3,10 @@ import { FiMic, FiMicOff, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/
 
 export default function ControlPanel({ 
   isRecording, 
-  transcript, 
+  transcript,
+  handleMic,
+  flipCamera,
+  speakResponse,
   responseActive,
   statusType,
   conversationActive
