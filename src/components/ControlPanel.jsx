@@ -7,18 +7,23 @@ export default function ControlPanel({
   handleMic, 
   flipCamera, 
   speakResponse, 
-  responseActive 
+  responseActive,
+  statusType
 }) {
+  // Map statusType to mic button CSS class
+  const micStateClass = statusType === 'listening' ? 'listening' 
+    : statusType === 'analyzing' ? 'thinking' 
+    : statusType === 'speaking' ? 'speaking' 
+    : '';
+
   return (
     <div className="control-panel">
-      {/* Live Transcript Display */}
       {(isRecording || transcript) && (
         <div className={`transcript-bubble ${transcript ? 'visible' : ''}`}>
           {transcript || 'Listening...'}
         </div>
       )}
 
-      {/* Floating Pill Controls */}
       <div className="controls-pill">
         <button 
           className={`pill-btn ${responseActive ? 'active' : ''}`} 
@@ -29,7 +34,7 @@ export default function ControlPanel({
         </button>
         
         <button 
-          className={`primary-mic-btn ${isRecording ? 'recording' : ''}`} 
+          className={`primary-mic-btn ${micStateClass}`} 
           onClick={handleMic}
           aria-label={isRecording ? "Stop Recording" : "Start Recording"}
         >

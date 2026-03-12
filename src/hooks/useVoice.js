@@ -2,10 +2,26 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-export function useVoice() {
+export function useVoice(onSpeechFinished) {
     const recognitionRef = useRef(null);
     const [isRecording, setIsRecording] = useState(false);
     const [transcript, setTranscript] = useState('');
+    const finalTranscriptRef = useRef('');
+
+    // Global cleanup for speech synthesis (prevents overlap on hot reloads or hard refreshes)
+    useEffect(() => {
+        const handleUnmountOrUnload = () => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        };
+
+        window.addEventListener('beforeunload', handleUnmountOrUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleUnmountOrUnload);
+            handleUnmountOrUnload(); // cancel on unmount too
+        };
+    }, []);
 
     useEffect(() => {
         if (!SpeechRecognition) return;
@@ -20,7 +36,7 @@ export function useVoice() {
             for (let i = e.resultIndex; i < e.results.length; i++) {
                 text += e.results[i][0].transcript;
             }
-            // Overwrite the interim transcript to reflect live results
+            finalTranscriptRef.current = text;
             setTranscript(text);
         };
 
@@ -31,16 +47,18 @@ export function useVoice() {
         };
 
         rec.onend = () => {
-            // Auto-restart if we think we should still be active
-            if (recognitionRef.current?._active) {
-                try {
-                    rec.start();
-                } catch (e) {
-                    // Sometimes it fails to start immediately
-                }
-            } else {
-                setIsRecording(false);
+            // Speech recognition has ended (either user stopped talking or manual stop)
+            setIsRecording(false);
+
+            // Auto Trigger the AI action if we have recorded something!
+            if (finalTranscriptRef.current.trim() && onSpeechFinished) {
+                const textToSend = finalTranscriptRef.current.trim();
+                onSpeechFinished(textToSend);
+                finalTranscriptRef.current = '';
+                setTranscript('');
             }
+
+            // Note: intentionally not forcing auto-restart loop here to allow the conversational model to think.
         };
 
         recognitionRef.current = rec;
@@ -49,13 +67,19 @@ export function useVoice() {
                 rec.stop();
             } catch (e) { }
         };
-    }, []);
+    }, [onSpeechFinished]);
 
     const startListening = useCallback(() => {
+        // Cancel AI currently speaking if user interrupts
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+
         setTranscript('');
+        finalTranscriptRef.current = '';
         setIsRecording(true);
+
         if (recognitionRef.current) {
-            recognitionRef.current._active = true;
             try {
                 recognitionRef.current.start();
             } catch (e) { }
@@ -65,9 +89,8 @@ export function useVoice() {
     const stopListening = useCallback(() => {
         setIsRecording(false);
         if (recognitionRef.current) {
-            recognitionRef.current._active = false;
             try {
-                recognitionRef.current.stop();
+                recognitionRef.current.stop(); // This will artificially trigger onend
             } catch (e) { }
         }
     }, []);

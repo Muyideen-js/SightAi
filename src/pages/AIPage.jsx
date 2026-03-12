@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiMoreHorizontal } from 'react-icons/fi';
 import { useCamera } from '../hooks/useCamera';
@@ -21,9 +21,16 @@ export default function AIPage() {
     startCamera, stopCamera, startContinuous, stopContinuous, isStreaming
   } = useCamera();
 
+  const handleSpeechEnd = useCallback((finalText) => {
+    // When speech ends automatically, grab a frame and send to Gemini
+    const frame = captureFrame();
+    processQuery(frame, finalText);
+  }, [captureFrame]);
+
+  // Pass the callback to useVoice so it triggers when silence is detected
   const {
     isRecording, transcript, startListening, stopListening, speak, stopSpeaking
-  } = useVoice();
+  } = useVoice(handleSpeechEnd);
 
   const {
     visionMemory, objectMemory, currentScene, addFrameData, getMemoryContextString
@@ -31,7 +38,8 @@ export default function AIPage() {
 
   const [response, setResponse] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [continuousMode, setContinuousMode] = useState(false); // Toggle for auto mode
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
 
   const hasSuggestedRef = React.useRef(false);
@@ -78,13 +86,10 @@ export default function AIPage() {
 
   const handleMic = () => {
     if (isRecording) {
+      // User manually interrupts/stops their own speech
       stopListening();
-      // On stop, process immediately
-      setTimeout(() => {
-        const frame = captureFrame();
-        processQuery(frame, transcript);
-      }, 300);
     } else {
+      // User taps mic to begin talking
       setResponse('');
       stopSpeaking();
       startListening();
@@ -99,7 +104,12 @@ export default function AIPage() {
       const memoryContext = getMemoryContextString();
       const reply = await session.askWithMemory(frameBase64, query, memoryContext);
       setResponse(reply);
+      setIsSpeaking(true);
       speak(reply);
+      // Auto-clear speaking state after estimated speech duration
+      const wordCount = reply.split(' ').length;
+      const estimatedMs = (wordCount / 2.5) * 1000; // ~150 words/min
+      setTimeout(() => setIsSpeaking(false), Math.min(estimatedMs, 15000));
     } catch (e) {
       console.error(e);
       setResponse("I couldn't process that frame. Please try again.");
@@ -108,10 +118,27 @@ export default function AIPage() {
     }
   };
 
-  const statusType = isRecording ? 'listening' : isAnalyzing ? 'analyzing' : 'ready';
+  // Swipe Gesture detection
+  const handleTouchStart = (e) => {
+    e.target._touchStartY = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    if (!e.target._touchStartY) return;
+    const touchEndY = e.changedTouches[0].clientY;
+    const diff = e.target._touchStartY - touchEndY;
+    // Swipe UP (Open Timeline)
+    if (diff > 60) setShowTimeline(true);
+    // Swipe DOWN (Hide response if open, close timeline)
+    if (diff < -60) {
+       setShowTimeline(false);
+       if (response) setResponse('');
+    }
+  };
+
+  const statusType = isRecording ? 'listening' : isAnalyzing ? 'analyzing' : isSpeaking ? 'speaking' : 'ready';
 
   return (
-    <div className="ai-page">
+    <div className="ai-page" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Top Navigation Bar */}
       <div className="ai-topbar">
         <button className="tb-btn" onClick={() => navigate('/')}>
@@ -156,7 +183,11 @@ export default function AIPage() {
         currentScene={currentScene}
       />
 
-      <AIResponse response={response} />
+      {/* V4 Upgrade: Pass onQuickAction which hooks into processQuery */}
+      <AIResponse response={response} onQuickAction={(query) => {
+          const frame = captureFrame();
+          processQuery(frame, query);
+      }} />
 
       <CameraView 
         videoRef={videoRef}
@@ -173,6 +204,7 @@ export default function AIPage() {
         flipCamera={flipCamera}
         speakResponse={() => speak(response)}
         responseActive={!!response}
+        statusType={statusType}
       />
     </div>
   );

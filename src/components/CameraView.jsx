@@ -19,6 +19,9 @@ export default function CameraView({ videoRef, stream, cameraOn, isAnalyzing, la
         </div>
       )}
 
+      {/* Cinematic Vignette Overlay */}
+      <div className="camera-vignette" />
+
       {/* Live Object Highlighting Overlays */}
       {latestMemory && (
         <div className="live-tags-overlay">
