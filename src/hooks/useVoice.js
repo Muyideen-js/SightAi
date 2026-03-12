@@ -8,41 +8,46 @@ export function useVoice(onSpeechFinished, isSpeaking) {
     const [transcript, setTranscript] = useState('');
     const [conversationActive, setConversationActive] = useState(false);
     const finalTranscriptRef = useRef('');
+    const conversationActiveRef = useRef(false);
+    const isSpeakingRef = useRef(false);
 
-    // Global cleanup for speech synthesis (prevents overlap on hot reloads or hard refreshes)
+    // Keep refs in sync with state/props so closures always see latest values
+    useEffect(() => { conversationActiveRef.current = conversationActive; }, [conversationActive]);
+    useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+
+    // Kill speech synthesis on page unload or component unmount
     useEffect(() => {
-        const handleUnmountOrUnload = () => {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-            }
-        };
-
-        window.addEventListener('beforeunload', handleUnmountOrUnload);
+        const kill = () => window.speechSynthesis?.cancel();
+        window.addEventListener('beforeunload', kill);
         return () => {
-            window.removeEventListener('beforeunload', handleUnmountOrUnload);
-            handleUnmountOrUnload(); // cancel on unmount too
+            window.removeEventListener('beforeunload', kill);
+            kill();
         };
     }, []);
 
-    // Effect to auto-restart listening if conversation is active AND AI is done speaking
+    // Auto-restart mic when AI finishes speaking (isSpeaking flips false)
     useEffect(() => {
         if (conversationActive && !isSpeaking && !isRecording) {
-            try {
-                if (recognitionRef.current) {
-                    setTranscript('');
-                    finalTranscriptRef.current = '';
-                    setIsRecording(true);
-                    recognitionRef.current.start();
-                }
-            } catch (e) { }
+            const timer = setTimeout(() => {
+                try {
+                    if (recognitionRef.current) {
+                        setTranscript('');
+                        finalTranscriptRef.current = '';
+                        setIsRecording(true);
+                        recognitionRef.current.start();
+                    }
+                } catch (e) { }
+            }, 300); // small delay to let browser settle
+            return () => clearTimeout(timer);
         }
     }, [conversationActive, isSpeaking, isRecording]);
 
+    // Setup SpeechRecognition instance once
     useEffect(() => {
         if (!SpeechRecognition) return;
 
         const rec = new SpeechRecognition();
-        rec.continuous = true;
+        rec.continuous = false; // let it auto-stop on silence
         rec.interimResults = true;
         rec.lang = 'en-US';
 
@@ -56,103 +61,96 @@ export function useVoice(onSpeechFinished, isSpeaking) {
         };
 
         rec.onerror = (e) => {
-            if (e.error !== 'no-speech') {
+            if (e.error !== 'no-speech' && e.error !== 'aborted') {
+                console.warn('SpeechRecognition error:', e.error);
                 setIsRecording(false);
             }
         };
 
         rec.onend = () => {
             setIsRecording(false);
+            const spokenText = finalTranscriptRef.current.trim();
 
-            // Auto Trigger the AI action if we have recorded something!
-            if (finalTranscriptRef.current.trim() && onSpeechFinished) {
-                const textToSend = finalTranscriptRef.current.trim();
-                onSpeechFinished(textToSend);
+            if (spokenText && onSpeechFinished) {
+                // User said something -> fire the callback
+                onSpeechFinished(spokenText);
                 finalTranscriptRef.current = '';
                 setTranscript('');
-            } else if (conversationActive && !isSpeaking) {
-                // If it was just silence or a hiccup, and we are in active mode, loop it.
+            } else if (conversationActiveRef.current && !isSpeakingRef.current) {
+                // Silence hiccup, conversation is on, loop mic back
                 try {
-                    rec.start();
+                    finalTranscriptRef.current = '';
+                    setTranscript('');
                     setIsRecording(true);
+                    rec.start();
                 } catch (e) { }
             }
         };
 
         recognitionRef.current = rec;
-        return () => {
-            try {
-                rec.stop();
-            } catch (e) { }
-        };
+        return () => { try { rec.stop(); } catch (e) { } };
     }, [onSpeechFinished]);
 
     const startListening = useCallback(() => {
-        // Cancel AI currently speaking if user interrupts
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-        }
-
+        window.speechSynthesis?.cancel(); // interrupt AI if speaking
         setTranscript('');
         finalTranscriptRef.current = '';
         setIsRecording(true);
-
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.start();
-            } catch (e) { }
-        }
+        try { recognitionRef.current?.start(); } catch (e) { }
     }, []);
 
     const stopListening = useCallback(() => {
         setIsRecording(false);
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.stop(); // This will artificially trigger onend
-            } catch (e) { }
-        }
+        try { recognitionRef.current?.stop(); } catch (e) { }
     }, []);
 
-    const toggleConversation = () => {
-        if (conversationActive) {
-            setConversationActive(false);
-            stopListening();
-            stopSpeaking();
-        } else {
-            setConversationActive(true);
-            startListening();
-        }
-    };
+    const toggleConversation = useCallback(() => {
+        setConversationActive(prev => {
+            const next = !prev;
+            if (next) {
+                // Turning ON conversation mode
+                window.speechSynthesis?.cancel();
+                setTranscript('');
+                finalTranscriptRef.current = '';
+                setIsRecording(true);
+                try { recognitionRef.current?.start(); } catch (e) { }
+            } else {
+                // Turning OFF conversation mode
+                setIsRecording(false);
+                window.speechSynthesis?.cancel();
+                try { recognitionRef.current?.stop(); } catch (e) { }
+            }
+            return next;
+        });
+    }, []);
 
-    const speak = useCallback((text) => {
-        if (!('speechSynthesis' in window)) return;
+    // speak() now accepts an onDone callback for precise timing
+    const speak = useCallback((text, onDone) => {
+        if (!('speechSynthesis' in window) || !text) return;
         window.speechSynthesis.cancel();
 
-        // Strip rough markdown characters before voice synthesis
         const cleanText = text.replace(/[*_#`]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1');
-
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 1.05; // Slightly faster for natural feel
+        utterance.rate = 1.05;
         utterance.pitch = 1;
 
-        // Attempt to pick a good natural voice if available
         const voices = window.speechSynthesis.getVoices();
         const goodVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Samantha') || v.lang === 'en-US');
         if (goodVoice) utterance.voice = goodVoice;
+
+        utterance.onend = () => { if (onDone) onDone(); };
+        utterance.onerror = () => { if (onDone) onDone(); };
 
         window.speechSynthesis.speak(utterance);
     }, []);
 
     const stopSpeaking = useCallback(() => {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-        }
+        window.speechSynthesis?.cancel();
     }, []);
 
     return {
         isRecording,
         transcript,
-        setTranscript,
         conversationActive,
         toggleConversation,
         speak,

@@ -54,7 +54,7 @@ export function useCamera() {
         canvas.height = videoRef.current.videoHeight * scale;
 
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL('image/jpeg', 0.8);
+        return canvas.toDataURL('image/jpeg', 0.6);
     }, []);
 
     // Get a tiny thumb map to calculate difference
