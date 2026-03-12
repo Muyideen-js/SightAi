@@ -16,63 +16,55 @@ export default function AIPage() {
   const navigate = useNavigate();
 
   const {
-    videoRef, stream, cameraOn, flipCamera, captureFrame,
+    videoRef, stream, cameraOn, flipCamera, captureFrame, getLatestFrame,
     startCamera, stopCamera, startContinuous, stopContinuous, isStreaming
   } = useCamera();
 
-  // State
-  const [response, setResponse] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [continuousMode, setContinuousMode] = useState(false);
-  const [showTimeline, setShowTimeline] = useState(false);
-  const hasSuggestedRef = useRef(false);
-
-  // Process a voice query: capture frame + send to Gemini + speak reply
-  const processQuery = useCallback(async (frameBase64, textQuery) => {
-    if (!frameBase64 || !session) return;
-    setIsAnalyzing(true);
-    try {
-      const query = textQuery?.trim() || "What do you see in this image? Explain clearly.";
-      const memoryContext = getMemoryContextRef.current();
-      const reply = await session.askWithMemory(frameBase64, query, memoryContext);
-      setResponse(reply);
-      setIsSpeaking(true);
-      speakRef.current(reply, () => setIsSpeaking(false));
-    } catch (e) {
-      console.error(e);
-      setResponse("I couldn't process that. Try again.");
-      setIsSpeaking(false);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, []);
-
-  // Callback for when user stops talking
-  const handleSpeechEnd = useCallback((finalText) => {
-    const frame = captureFrame();
-    if (frame) processQuery(frame, finalText);
-  }, [captureFrame, processQuery]);
-
-  // Voice hook
   const {
-    isRecording, transcript, conversationActive, toggleConversation, speak, stopSpeaking
-  } = useVoice(handleSpeechEnd, isSpeaking);
+    isRecording, transcript, conversationActive, isSpeaking,
+    toggleConversation, setOnSpeechDone, speak, stopSpeaking
+  } = useVoice();
 
-  // Store speak in a ref so processQuery always uses the latest version
-  const speakRef = useRef(speak);
-  useEffect(() => { speakRef.current = speak; }, [speak]);
-
-  // Vision Memory
   const {
     visionMemory, objectMemory, currentScene, addFrameData, getMemoryContextString
   } = useVisionMemory();
 
-  // Store getMemoryContextString in a ref for processQuery
-  const getMemoryContextRef = useRef(getMemoryContextString);
-  useEffect(() => { getMemoryContextRef.current = getMemoryContextString; }, [getMemoryContextString]);
+  const [response, setResponse] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const hasSuggestedRef = useRef(false);
 
-  // Init
+  // Process a voice query
+  const processQuery = useCallback(async (frameBase64, textQuery) => {
+    if (!frameBase64 || !session) return;
+    setIsAnalyzing(true);
+    try {
+      const query = textQuery?.trim() || "What do you see? Explain clearly.";
+      const memoryContext = getMemoryContextString();
+      const reply = await session.askWithMemory(frameBase64, query, memoryContext);
+      setResponse(reply);
+      speak(reply);
+    } catch (e) {
+      console.error(e);
+      setResponse("I couldn't process that. Try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [getMemoryContextString, speak]);
+
+  // Wire voice callback: when user stops speaking, grab latest frame instantly
+  useEffect(() => {
+    setOnSpeechDone((finalText) => {
+      // Grab the pre-cached frame instantly (no canvas draw delay)
+      const frame = getLatestFrame();
+      if (frame) {
+        processQuery(frame, finalText);
+      }
+    });
+  }, [setOnSpeechDone, getLatestFrame, processQuery]);
+
+  // Init session and camera
   useEffect(() => {
     session = new VisionSession();
     startCamera();
@@ -83,7 +75,7 @@ export default function AIPage() {
     };
   }, []);
 
-  // Background continuous vision mode (separate from voice)
+  // Background continuous vision mode
   useEffect(() => {
     if (continuousMode) {
       startContinuous(async (frameBase64) => {
@@ -95,11 +87,10 @@ export default function AIPage() {
               if (jsonResult.food_items?.length >= 2 && !hasSuggestedRef.current) {
                 hasSuggestedRef.current = true;
                 const ingredients = jsonResult.food_items.slice(0, 3).join(', ');
-                const msg = `I see ingredients like ${ingredients}. Ask me for a recipe if you'd like to cook!`;
+                const msg = `I see ingredients like ${ingredients}. Ask me for a recipe!`;
                 if (!response) {
                   setResponse(msg);
-                  setIsSpeaking(true);
-                  speak(msg, () => setIsSpeaking(false));
+                  speak(msg);
                 }
               }
             }
@@ -111,7 +102,7 @@ export default function AIPage() {
     }
   }, [continuousMode, isAnalyzing, isRecording, addFrameData, response, speak]);
 
-  // Mic button toggles conversation mode ON/OFF
+  // Mic button toggles conversation mode
   const handleMicToggle = () => {
     if (conversationActive) setResponse('');
     toggleConversation();
@@ -119,17 +110,19 @@ export default function AIPage() {
 
   // Quick action from response card
   const handleQuickAction = (query) => {
-    const frame = captureFrame();
+    const frame = getLatestFrame();
     if (frame) processQuery(frame, query);
   };
 
   // Swipe gestures
-  const handleTouchStart = (e) => { e.target._touchStartY = e.touches[0].clientY; };
+  const touchRef = useRef(null);
+  const handleTouchStart = (e) => { touchRef.current = e.touches[0].clientY; };
   const handleTouchEnd = (e) => {
-    if (!e.target._touchStartY) return;
-    const diff = e.target._touchStartY - e.changedTouches[0].clientY;
+    if (touchRef.current === null) return;
+    const diff = touchRef.current - e.changedTouches[0].clientY;
     if (diff > 60) setShowTimeline(true);
     if (diff < -60) { setShowTimeline(false); if (response) setResponse(''); }
+    touchRef.current = null;
   };
 
   // Voice state machine
