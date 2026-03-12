@@ -41,6 +41,7 @@ export function useCamera() {
 
     const [isStreaming, setIsStreaming] = useState(false);
     const streamIntervalRef = useRef(null);
+    const prevImageDataRef = useRef(null);
 
     const captureFrame = useCallback(() => {
         if (!videoRef.current) return null;
@@ -51,14 +52,57 @@ export function useCamera() {
         return canvas.toDataURL('image/jpeg', 0.8);
     }, []);
 
+    // Get a tiny thumb map to calculate difference
+    const getDiffMap = useCallback(() => {
+        if (!videoRef.current) return null;
+        const diffCanvas = document.createElement('canvas');
+        diffCanvas.width = 64;
+        diffCanvas.height = 64;
+        const ctx = diffCanvas.getContext('2d');
+        ctx.drawImage(videoRef.current, 0, 0, 64, 64);
+        return ctx.getImageData(0, 0, 64, 64).data;
+    }, []);
+
     const startContinuous = useCallback((callback, intervalMs = 3000) => {
         if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
         setIsStreaming(true);
+        prevImageDataRef.current = null; // reset diff memory
+
         streamIntervalRef.current = setInterval(() => {
-            const frame = captureFrame();
-            if (frame) callback(frame);
+            const currentData = getDiffMap();
+            if (!currentData) return;
+
+            let isDifferent = true;
+
+            if (prevImageDataRef.current) {
+                let diffCount = 0;
+                const totalPixels = currentData.length / 4;
+                for (let i = 0; i < currentData.length; i += 4) {
+                    const rDiff = Math.abs(currentData[i] - prevImageDataRef.current[i]);
+                    const gDiff = Math.abs(currentData[i + 1] - prevImageDataRef.current[i + 1]);
+                    const bDiff = Math.abs(currentData[i + 2] - prevImageDataRef.current[i + 2]);
+                    // simple euclidian approximation
+                    if (rDiff + gDiff + bDiff > 45) {
+                        diffCount++;
+                    }
+                }
+                const diffRatio = diffCount / totalPixels;
+                // If less than 2% of the frame changed, don't trigger the API
+                if (diffRatio < 0.02) {
+                    isDifferent = false;
+                }
+            }
+
+            if (isDifferent) {
+                prevImageDataRef.current = currentData;
+                const frame = captureFrame();
+                if (frame) callback(frame);
+            } else {
+                console.log("Frame skipped -> Below difference threshold.");
+            }
+
         }, intervalMs);
-    }, [captureFrame]);
+    }, [captureFrame, getDiffMap]);
 
     const stopContinuous = useCallback(() => {
         if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);

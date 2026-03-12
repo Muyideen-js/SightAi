@@ -9,9 +9,11 @@ export default function AIResponse({ response }) {
     <div className="ai-response-overlay">
       <div className="ai-response-glasscard">
         <div className="ai-glow-accent" />
-        <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown-light">
-          {response}
-        </ReactMarkdown>
+        <div className="markdown-light">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {response}
+          </ReactMarkdown>
+        </div>
       </div>
     </div>
   );

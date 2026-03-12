@@ -19,13 +19,60 @@ export class VisionSession {
         this.systemInstruction = "You are SightAI, a premium real-time visual assistant. Describe what you see, answer questions clearly, and speak conversationally as if you are a friendly AI companion.";
     }
 
-    async ask(imageDataUrl, textQuery) {
-        const parts = [];
-        if (textQuery) {
-            parts.push({ text: textQuery });
-        } else {
-            parts.push({ text: "What do you see?" });
+    // 1. Silent Background Vision Analysis (JSON Builder)
+    async analyzeFrameSilent(imageDataUrl) {
+        if (!imageDataUrl) return null;
+        const base64Data = imageDataUrl.split(',')[1];
+
+        try {
+            const response = await this.ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [
+                            {
+                                text: `You are a real-time visual observer running silently in the background. Analyze this image and extract important objects, food items, tools, and scene context. Keep the description very brief. Return strictly JSON matching this structure:
+                            {
+                                "objects": ["list", "of", "general", "objects"],
+                                "food_items": ["list", "of", "food"],
+                                "tools": ["list", "of", "tools"],
+                                "important_items": ["key focal points"],
+                                "scene_description": "short string describing the scene"
+                            }` },
+                            {
+                                inlineData: {
+                                    data: base64Data,
+                                    mimeType: 'image/jpeg'
+                                }
+                            }
+                        ]
+                    }
+                ],
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            const replyText = response.text;
+            return JSON.parse(replyText);
+
+        } catch (error) {
+            console.error("SightAI JSON Silent Vision Error:", error);
+            // Ignore strict parsing failures silently in background
+            return null;
         }
+    }
+
+    // 2. Foreground Conversational Memory Query
+    async askWithMemory(imageDataUrl, textQuery, visualMemoryContext) {
+        const parts = [];
+
+        // Inject the memory context directly into the prompt text before user query
+        let fullPrompt = visualMemoryContext ? `${visualMemoryContext}\n\nUser Question:\n` : "";
+        fullPrompt += textQuery ? textQuery : "What do you see right now in this frame?";
+
+        parts.push({ text: fullPrompt });
 
         if (imageDataUrl) {
             const base64Data = imageDataUrl.split(',')[1];
@@ -53,8 +100,8 @@ export class VisionSession {
 
             const replyText = response.text;
 
-            // On success, save to memory
-            this.history.push(userMessage);
+            // On success, save to memory (Note: we store the raw query without the giant context block to save payload size)
+            this.history.push({ role: 'user', parts: [{ text: textQuery || "What do you see?" }] });
             this.history.push({ role: 'model', parts: [{ text: replyText }] });
 
             // Keep history lean (last ~6 pairs) to prevent payload bloat
@@ -74,8 +121,8 @@ export class VisionSession {
     }
 }
 
-// Keep the previous solitary ask method for quick non-memory one-offs if needed
+// Ensure the old method still somewhat works for backward compat if needed
 export const analyzeImageWithAudio = async (imageDataUrl, textQuery) => {
     const session = new VisionSession();
-    return session.ask(imageDataUrl, textQuery);
+    return session.askWithMemory(imageDataUrl, textQuery, "");
 };
