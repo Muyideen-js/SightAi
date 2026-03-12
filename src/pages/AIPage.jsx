@@ -21,6 +21,14 @@ export default function AIPage() {
     startCamera, stopCamera, startContinuous, stopContinuous, isStreaming
   } = useCamera();
 
+  const [response, setResponse] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  
+  const hasSuggestedRef = React.useRef(false);
+
   const handleSpeechEnd = useCallback((finalText) => {
     // When speech ends automatically, grab a frame and send to Gemini
     const frame = captureFrame();
@@ -35,14 +43,6 @@ export default function AIPage() {
   const {
     visionMemory, objectMemory, currentScene, addFrameData, getMemoryContextString
   } = useVisionMemory();
-
-  const [response, setResponse] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [continuousMode, setContinuousMode] = useState(false);
-  const [showTimeline, setShowTimeline] = useState(false);
-
-  const hasSuggestedRef = React.useRef(false);
 
   // Initialize Session
   useEffect(() => {
