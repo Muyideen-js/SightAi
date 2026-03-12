@@ -1,220 +1,132 @@
-import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import {
-  FiMic, FiMicOff, FiCamera, FiCameraOff,
-  FiRefreshCw, FiVolume2, FiArrowLeft
-} from 'react-icons/fi'
-import { analyzeImageWithAudio } from '../services/gemini'
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiArrowLeft, FiMoreHorizontal } from 'react-icons/fi';
+import { useCamera } from '../hooks/useCamera';
+import { useVoice } from '../hooks/useVoice';
+import { VisionSession } from '../services/gemini';
+import CameraView from '../components/CameraView';
+import ControlPanel from '../components/ControlPanel';
+import AIResponse from '../components/AIResponse';
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+let session; // persist across renders for this page lifetime
 
-function AIPage() {
-  const navigate = useNavigate()
-  const videoRef = useRef(null)
-  const recognitionRef = useRef(null)
-  const [stream, setStream] = useState(null)
-  const [cameraOn, setCameraOn] = useState(true)
-  const [isRecording, setIsRecording] = useState(false)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [response, setResponse] = useState('')
-  const [transcript, setTranscript] = useState('')
-  const [facingMode, setFacingMode] = useState('environment')
+export default function AIPage() {
+  const navigate = useNavigate();
+  
+  const {
+    videoRef, stream, cameraOn, flipCamera, captureFrame,
+    startCamera, stopCamera, startContinuous, stopContinuous, isStreaming
+  } = useCamera();
 
+  const {
+    isRecording, transcript, startListening, stopListening, speak, stopSpeaking
+  } = useVoice();
+
+  const [response, setResponse] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(false); // Toggle for auto mode
+
+  // Initialize Session
   useEffect(() => {
-    if (cameraOn) startCamera()
-    else stopCamera()
-    return () => stopCamera()
-  }, [cameraOn, facingMode])
-
-  useEffect(() => {
-    if (!SpeechRecognition) return
-
-    const rec = new SpeechRecognition()
-    rec.continuous = true
-    rec.interimResults = true
-    rec.lang = 'en-US'
-
-    rec.onresult = (e) => {
-      let text = ''
-      for (let i = 0; i < e.results.length; i++) {
-        text += e.results[i][0].transcript
-      }
-      setTranscript(text)
-    }
-
-    rec.onerror = (e) => {
-      if (e.error !== 'no-speech') setIsRecording(false)
-    }
-
-    rec.onend = () => {
-      if (recognitionRef.current?._active) {
-        try { rec.start() } catch(e) {}
-      }
-    }
-
-    recognitionRef.current = rec
+    session = new VisionSession();
+    startCamera();
     return () => {
-      try { rec.stop() } catch(e) {}
-    }
-  }, [])
+      stopCamera();
+      stopListening();
+      if (session) session.clearMemory();
+    };
+  }, []);
 
-  const startCamera = async () => {
-    stopCamera()
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-        audio: false
-      })
-      setStream(s)
-      if (videoRef.current) videoRef.current.srcObject = s
-    } catch {
-      setCameraOn(false)
+  // Continuous Auto-Mode logic
+  useEffect(() => {
+    if (continuousMode) {
+      startContinuous((frameBase64) => {
+        if (!isAnalyzing && !isRecording) {
+           processQuery(frameBase64, "Analyze this frame and tell me if anything changed.");
+        }
+      }, 5000); // 5 sec interval for memory
+    } else {
+      stopContinuous();
     }
-  }
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop())
-      setStream(null)
-    }
-  }
-
-  const captureFrame = () => {
-    if (!videoRef.current) return null
-    const c = document.createElement('canvas')
-    c.width = videoRef.current.videoWidth
-    c.height = videoRef.current.videoHeight
-    c.getContext('2d').drawImage(videoRef.current, 0, 0, c.width, c.height)
-    return c.toDataURL('image/jpeg')
-  }
+  }, [continuousMode, isAnalyzing, isRecording]);
 
   const handleMic = () => {
     if (isRecording) {
-      setIsRecording(false)
-      if (recognitionRef.current) {
-        recognitionRef.current._active = false
-        try { recognitionRef.current.stop() } catch(e) {}
-      }
-      setTimeout(() => processQuery(), 300)
+      stopListening();
+      // On stop, process immediately
+      setTimeout(() => {
+        const frame = captureFrame();
+        processQuery(frame, transcript);
+      }, 300);
     } else {
-      setResponse('')
-      setTranscript('')
-      setIsRecording(true)
-      if (recognitionRef.current) {
-        recognitionRef.current._active = true
-        try { recognitionRef.current.start() } catch(e) {}
-      }
+      setResponse('');
+      stopSpeaking();
+      startListening();
     }
-  }
+  };
 
-  const processQuery = async () => {
-    setIsAnalyzing(true)
-    const frame = captureFrame()
-    const query = transcript || 'What do you see? Describe and help.'
-
+  const processQuery = async (frameBase64, textQuery) => {
+    if (!frameBase64) return;
+    setIsAnalyzing(true);
     try {
-      const reply = await analyzeImageWithAudio(frame, query)
-      setResponse(reply)
-      speak(reply)
-    } catch {
-      const msg = "Couldn't process that. Try again."
-      setResponse(msg)
-      speak(msg)
+      const query = textQuery?.trim() || "What do you see in this image? Explain clearly.";
+      const reply = await session.ask(frameBase64, query);
+      setResponse(reply);
+      speak(reply);
+    } catch (e) {
+      console.error(e);
+      setResponse("I couldn't process that frame. Please try again.");
     } finally {
-      setIsAnalyzing(false)
+      setIsAnalyzing(false);
     }
-  }
+  };
 
-  const speak = (text) => {
-    if (!('speechSynthesis' in window)) return
-    window.speechSynthesis.cancel()
-    
-    // Strip markdown chars before speaking
-    const cleanText = text.replace(/[*_#]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1')
-    const u = new SpeechSynthesisUtterance(cleanText)
-    u.rate = 1
-    u.pitch = 1
-    window.speechSynthesis.speak(u)
-  }
-
-  const statusLabel = isAnalyzing ? 'Analyzing' : isRecording ? 'Listening' : response ? 'Done' : 'Ready'
-  const statusCls = isAnalyzing ? 'analyzing' : isRecording ? 'listening' : response ? 'done' : 'idle'
+  const statusType = isRecording ? 'listening' : isAnalyzing ? 'analyzing' : 'ready';
 
   return (
     <div className="ai-page">
+      {/* Top Navigation Bar */}
       <div className="ai-topbar">
         <button className="tb-btn" onClick={() => navigate('/')}>
-          <FiArrowLeft size={16} />
+          <FiArrowLeft size={18} />
         </button>
+        
         <div className="tb-center">
-          <div className="css-logo" style={{ transform: 'scale(0.6)' }} />
+          <div className="css-lens" style={{ transform: 'scale(0.5)' }} />
           <span className="tb-logo">SightAI</span>
-          <span className={`tb-status ${statusCls}`}>
+          <span className={`tb-status ${statusType}`}>
             <span className="tb-dot" />
-            {statusLabel}
+            {statusType}
           </span>
         </div>
-        <div className="tb-right">
-          <button className={`tb-btn ${cameraOn ? '' : 'off'}`} onClick={() => setCameraOn(p => !p)}>
-            {cameraOn ? <FiCamera size={15} /> : <FiCameraOff size={15} />}
-          </button>
-          <button className="tb-btn" onClick={() => setFacingMode(p => p === 'user' ? 'environment' : 'user')}>
-            <FiRefreshCw size={15} />
-          </button>
-        </div>
+
+        <button 
+          className={`tb-btn ${continuousMode ? 'active' : ''}`} 
+          onClick={() => setContinuousMode(!continuousMode)}
+          aria-label="Toggle Auto-Stream"
+          style={{ color: continuousMode ? 'var(--primary)' : 'inherit' }}
+        >
+          <FiMoreHorizontal size={18} />
+        </button>
       </div>
 
-      {response && (
-        <div className="ai-response-wrap">
-          <div className="ai-response-card markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {response}
-            </ReactMarkdown>
-          </div>
-        </div>
-      )}
+      <AIResponse response={response} />
 
-      <div className="ai-camera">
-        {cameraOn && stream ? (
-          <video ref={videoRef} autoPlay playsInline muted className="cam-feed" />
-        ) : (
-          <div className="cam-off">
-            <FiCameraOff size={36} />
-            <span>{cameraOn ? 'Starting...' : 'Camera off'}</span>
-          </div>
-        )}
+      <CameraView 
+        videoRef={videoRef}
+        stream={stream}
+        cameraOn={cameraOn}
+        isAnalyzing={isAnalyzing}
+      />
 
-        <div className={`scan-fx ${isAnalyzing ? 'active' : ''}`}>
-          <div className="scan-beam" />
-          <div className="scan-corner tl" />
-          <div className="scan-corner tr" />
-          <div className="scan-corner bl" />
-          <div className="scan-corner br" />
-        </div>
-      </div>
-
-      <div className="ai-dock">
-        {(isRecording || transcript) && (
-          <div className={`dock-transcript ${transcript ? 'has' : ''}`}>
-            {transcript || 'Listening...'}
-          </div>
-        )}
-        <div className="dock-row">
-          <button className={`dock-btn ${response ? 'active' : ''}`} onClick={() => speak(response)}>
-            <FiVolume2 size={16} />
-          </button>
-          <button className={`dock-mic ${isRecording ? 'rec' : ''}`} onClick={handleMic}>
-            {isRecording ? <FiMicOff size={22} /> : <FiMic size={22} />}
-          </button>
-          <button className="dock-btn" onClick={() => setFacingMode(p => p === 'user' ? 'environment' : 'user')}>
-            <FiRefreshCw size={16} />
-          </button>
-        </div>
-      </div>
+      <ControlPanel 
+        isRecording={isRecording}
+        transcript={transcript}
+        handleMic={handleMic}
+        flipCamera={flipCamera}
+        speakResponse={() => speak(response)}
+        responseActive={!!response}
+      />
     </div>
-  )
+  );
 }
-
-export default AIPage
