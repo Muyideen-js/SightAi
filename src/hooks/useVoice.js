@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-export function useVoice(onSpeechFinished) {
+export function useVoice(onSpeechFinished, isSpeaking) {
     const recognitionRef = useRef(null);
     const [isRecording, setIsRecording] = useState(false);
     const [transcript, setTranscript] = useState('');
+    const [conversationActive, setConversationActive] = useState(false);
     const finalTranscriptRef = useRef('');
 
     // Global cleanup for speech synthesis (prevents overlap on hot reloads or hard refreshes)
@@ -22,6 +23,20 @@ export function useVoice(onSpeechFinished) {
             handleUnmountOrUnload(); // cancel on unmount too
         };
     }, []);
+
+    // Effect to auto-restart listening if conversation is active AND AI is done speaking
+    useEffect(() => {
+        if (conversationActive && !isSpeaking && !isRecording) {
+            try {
+                if (recognitionRef.current) {
+                    setTranscript('');
+                    finalTranscriptRef.current = '';
+                    setIsRecording(true);
+                    recognitionRef.current.start();
+                }
+            } catch (e) { }
+        }
+    }, [conversationActive, isSpeaking, isRecording]);
 
     useEffect(() => {
         if (!SpeechRecognition) return;
@@ -47,7 +62,6 @@ export function useVoice(onSpeechFinished) {
         };
 
         rec.onend = () => {
-            // Speech recognition has ended (either user stopped talking or manual stop)
             setIsRecording(false);
 
             // Auto Trigger the AI action if we have recorded something!
@@ -56,9 +70,13 @@ export function useVoice(onSpeechFinished) {
                 onSpeechFinished(textToSend);
                 finalTranscriptRef.current = '';
                 setTranscript('');
+            } else if (conversationActive && !isSpeaking) {
+                // If it was just silence or a hiccup, and we are in active mode, loop it.
+                try {
+                    rec.start();
+                    setIsRecording(true);
+                } catch (e) { }
             }
-
-            // Note: intentionally not forcing auto-restart loop here to allow the conversational model to think.
         };
 
         recognitionRef.current = rec;
@@ -95,9 +113,15 @@ export function useVoice(onSpeechFinished) {
         }
     }, []);
 
-    const toggleListening = () => {
-        if (isRecording) stopListening();
-        else startListening();
+    const toggleConversation = () => {
+        if (conversationActive) {
+            setConversationActive(false);
+            stopListening();
+            stopSpeaking();
+        } else {
+            setConversationActive(true);
+            startListening();
+        }
     };
 
     const speak = useCallback((text) => {
@@ -129,9 +153,8 @@ export function useVoice(onSpeechFinished) {
         isRecording,
         transcript,
         setTranscript,
-        startListening,
-        stopListening,
-        toggleListening,
+        conversationActive,
+        toggleConversation,
         speak,
         stopSpeaking,
     };

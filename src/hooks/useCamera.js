@@ -44,10 +44,15 @@ export function useCamera() {
     const prevImageDataRef = useRef(null);
 
     const captureFrame = useCallback(() => {
-        if (!videoRef.current) return null;
+        if (!videoRef.current || videoRef.current.videoWidth === 0) return null;
         const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
+
+        // Scale to 720p roughly for faster API transfer
+        const targetWidth = 720;
+        const scale = targetWidth / videoRef.current.videoWidth;
+        canvas.width = targetWidth;
+        canvas.height = videoRef.current.videoHeight * scale;
+
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         return canvas.toDataURL('image/jpeg', 0.8);
     }, []);

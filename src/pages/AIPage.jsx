@@ -29,8 +29,8 @@ export default function AIPage() {
 
   // Pass the callback to useVoice so it triggers when silence is detected
   const {
-    isRecording, transcript, startListening, stopListening, speak, stopSpeaking
-  } = useVoice(handleSpeechEnd);
+    isRecording, transcript, conversationActive, toggleConversation, speak, stopSpeaking
+  } = useVoice(handleSpeechEnd, isSpeaking);
 
   const {
     visionMemory, objectMemory, currentScene, addFrameData, getMemoryContextString
@@ -50,7 +50,7 @@ export default function AIPage() {
     startCamera();
     return () => {
       stopCamera();
-      stopListening();
+      if (conversationActive) toggleConversation();
       if (session) session.clearMemory();
     };
   }, []);
@@ -84,16 +84,11 @@ export default function AIPage() {
     }
   }, [continuousMode, isAnalyzing, isRecording, addFrameData, response, speak]);
 
-  const handleMic = () => {
-    if (isRecording) {
-      // User manually interrupts/stops their own speech
-      stopListening();
-    } else {
-      // User taps mic to begin talking
+  const handleToggleConversation = () => {
+    if (conversationActive) {
       setResponse('');
-      stopSpeaking();
-      startListening();
     }
+    toggleConversation();
   };
 
   const processQuery = async (frameBase64, textQuery) => {
@@ -135,7 +130,12 @@ export default function AIPage() {
     }
   };
 
-  const statusType = isRecording ? 'listening' : isAnalyzing ? 'analyzing' : isSpeaking ? 'speaking' : 'ready';
+  // Redefine statusType to reflect the new conversation loop logic
+  const statusType = 
+    isAnalyzing ? 'analyzing' 
+    : isSpeaking ? 'speaking' 
+    : (conversationActive || isRecording) ? 'listening' 
+    : 'ready';
 
   return (
     <div className="ai-page" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -200,7 +200,8 @@ export default function AIPage() {
       <ControlPanel 
         isRecording={isRecording}
         transcript={transcript}
-        handleMic={handleMic}
+        handleMic={handleToggleConversation}
+        conversationActive={conversationActive}
         flipCamera={flipCamera}
         speakResponse={() => speak(response)}
         responseActive={!!response}

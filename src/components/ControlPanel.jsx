@@ -4,16 +4,15 @@ import { FiMic, FiMicOff, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/
 export default function ControlPanel({ 
   isRecording, 
   transcript, 
-  handleMic, 
-  flipCamera, 
-  speakResponse, 
   responseActive,
-  statusType
+  statusType,
+  conversationActive
 }) {
   // Map statusType to mic button CSS class
   const micStateClass = statusType === 'listening' ? 'listening' 
     : statusType === 'analyzing' ? 'thinking' 
     : statusType === 'speaking' ? 'speaking' 
+    : conversationActive ? 'listening-paused' // if mic just blinked
     : '';
 
   return (
