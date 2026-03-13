@@ -958,3 +958,86 @@ body {
     transform: translateY(-8px);
   }
 }
+
+/* ═══════════════ MOBILE RESPONSIVENESS ═══════════════ */
+@media (max-width: 768px) {
+  /* Landing Page */
+  .landing h1 {
+    font-size: 2rem;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .features {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* AI Page Topbar */
+  .ai-topbar {
+    padding: 0 8px;
+  }
+  
+  .tb-logo {
+    display: none; /* Hide text on small screens, keep logo mark */
+  }
+  
+  .tb-status {
+    font-size: 0.65rem;
+  }
+  
+  .tb-center {
+    padding: 4px 10px 4px 4px;
+  }
+
+  /* Control Panel Bottom area */
+  .control-panel {
+    bottom: 24px;
+    padding: 0 16px;
+  }
+
+  .controls-pill {
+    padding: 8px 16px;
+    gap: 16px;
+  }
+
+  /* Make mic button slightly tighter on very small screens */
+  .primary-mic-btn {
+    width: 64px;
+    height: 64px;
+    top: -24px;
+  }
+
+  /* AI Response Overlay */
+  .ai-response-overlay {
+    bottom: 120px;
+    padding: 0 16px;
+  }
+
+  .ai-response-glasscard {
+    padding: 16px;
+    max-height: 50vh;
+  }
+
+  /* Quick action buttons row wrap */
+  .quick-actions-row {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  .action-pill {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+
+  /* Timeline Slide-over */
+  .timeline-panel {
+    width: 100%;
+    right: 0;
+    max-height: 85vh;
+    border-radius: 24px 24px 0 0;
+    bottom: 0;
+    top: auto;
+  }
+}

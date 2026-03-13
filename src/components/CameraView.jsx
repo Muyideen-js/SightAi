@@ -6,7 +6,12 @@ export default function CameraView({ videoRef, stream, cameraOn, isAnalyzing, la
     <div className="camera-view-container">
       {cameraOn && stream ? (
         <video 
-          ref={videoRef} 
+          ref={(el) => {
+            if (videoRef) videoRef.current = el;
+            if (el && stream && el.srcObject !== stream) {
+              el.srcObject = stream;
+            }
+          }}
           autoPlay 
           playsInline 
           muted 
