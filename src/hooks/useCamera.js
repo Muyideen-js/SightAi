@@ -11,7 +11,7 @@ export function useCamera() {
         stopCamera();
         try {
             const s = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode },
+                video: { facingMode: { ideal: facingMode } },
                 audio: false,
             });
             setStream(s);
@@ -19,6 +19,9 @@ export function useCamera() {
             setCameraOn(true);
         } catch (e) {
             console.error('Camera start failed:', e);
+            if (e.name === "NotAllowedError" || e.name === "NotFoundError" || e.name === "NotReadableError" || e.message) {
+                alert(`Camera access failed: ${e.message || e.name}. Ensure you allowed permissions and are using a secure connection (HTTPS).`);
+            }
             setCameraOn(false);
         }
     }, [facingMode]);

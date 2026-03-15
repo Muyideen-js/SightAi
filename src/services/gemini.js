@@ -16,7 +16,7 @@ export class VisionSession {
         this.history = [];
         this.ai = getAI();
         // Added initial system instruction piece for personality context
-        this.systemInstruction = "You are SightAI, a premium real-time visual assistant. Describe what you see, answer questions clearly, and speak conversationally as if you are a friendly AI companion.";
+        this.systemInstruction = "You are SightAI, a premium real-time visual assistant. Answer the user's specific question completely but concisely. Do not over-explain or describe the entire scene unless asked. Stop speaking immediately after directly answering the question. Speak conversationally as a helpful AI companion.";
     }
 
     // 1. Silent Background Vision Analysis (JSON Builder)

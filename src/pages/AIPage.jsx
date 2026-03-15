@@ -40,7 +40,7 @@ export default function AIPage() {
     if (!frameBase64 || !session) return;
     setIsAnalyzing(true);
     try {
-      const query = textQuery?.trim() || "What do you see? Explain clearly.";
+      const query = textQuery?.trim() || "What do you see? Be brief and limit to one sentence.";
       const memoryContext = getMemoryContextString();
       const reply = await session.askWithMemory(frameBase64, query, memoryContext);
       setResponse(reply);

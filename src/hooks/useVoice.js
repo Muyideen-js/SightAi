@@ -121,6 +121,12 @@ export function useVoice() {
                 finalTranscriptRef.current = '';
                 setTranscript('');
                 try {
+                    if (!recognitionRef.current) {
+                        alert("Speech recognition is not supported on your browser or device.");
+                        setIsRecording(false);
+                        setConversationActive(false);
+                        return;
+                    }
                     recognitionRef.current?.start();
                     setIsRecording(true);
                 } catch (e) { }

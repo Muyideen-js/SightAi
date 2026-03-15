@@ -10,6 +10,9 @@ export default function CameraView({ videoRef, stream, cameraOn, isAnalyzing, la
             if (videoRef) videoRef.current = el;
             if (el && stream && el.srcObject !== stream) {
               el.srcObject = stream;
+              el.onloadedmetadata = () => {
+                el.play().catch(e => console.error("Mobile play error:", e));
+              };
             }
           }}
           autoPlay 
