@@ -117,6 +117,12 @@ export function useVoice() {
             const next = !prev;
             if (next) {
                 window.speechSynthesis?.cancel();
+                // Unlock speech synthesis on iOS by speaking a silent utterance on user interaction
+                if ('speechSynthesis' in window) {
+                    const unlock = new SpeechSynthesisUtterance('');
+                    unlock.volume = 0;
+                    window.speechSynthesis.speak(unlock);
+                }
                 setIsSpeaking(false);
                 finalTranscriptRef.current = '';
                 setTranscript('');

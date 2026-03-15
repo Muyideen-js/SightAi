@@ -33,6 +33,7 @@ export default function AIPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [continuousMode, setContinuousMode] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [activePointerBox, setActivePointerBox] = useState(null);
   const hasSuggestedRef = useRef(false);
 
   // Process a voice query
@@ -42,7 +43,25 @@ export default function AIPage() {
     try {
       const query = textQuery?.trim() || "What do you see? Be brief and limit to one sentence.";
       const memoryContext = getMemoryContextString();
-      const reply = await session.askWithMemory(frameBase64, query, memoryContext);
+      let reply = await session.askWithMemory(frameBase64, query, memoryContext);
+      
+      // Look for a bounding box like [200, 300, 400, 500] in the text
+      const boxMatch = reply.match(/\[\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*\]/);
+      if (boxMatch) {
+        // [ymin, xmin, ymax, xmax] from 0 to 1000 standard
+        const [_, ymin, xmin, ymax, xmax] = boxMatch;
+        setActivePointerBox({ 
+          ymin: parseInt(ymin)/10, 
+          xmin: parseInt(xmin)/10, 
+          ymax: parseInt(ymax)/10, 
+          xmax: parseInt(xmax)/10 
+        });
+        // Remove the ugly coordinates from the text displayed and spoken
+        reply = reply.replace(boxMatch[0], '').trim();
+      } else {
+        setActivePointerBox(null);
+      }
+
       setResponse(reply);
       speak(reply);
     } catch (e) {
@@ -183,6 +202,7 @@ export default function AIPage() {
         cameraOn={cameraOn}
         isAnalyzing={isAnalyzing}
         latestMemory={visionMemory[visionMemory.length - 1]}
+        activePointerBox={activePointerBox}
       />
 
       <ControlPanel
